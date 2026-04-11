@@ -61,8 +61,6 @@ tests/
 
 ## ⚙️ Instalación
 
-### 🪟 Windows
-
 ```bash
 git clone https://github.com/Marcial-Godes/expense-tracker-api.git
 cd expense-tracker-api
