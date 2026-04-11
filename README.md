@@ -1,132 +1,140 @@
 # 💸 Expense Tracker API
 
-API backend para la gestión de gastos personales con autenticación JWT,
-arquitectura limpia y tests aislados.
+API backend desarrollada con **FastAPI** para la gestión de gastos personales, con autenticación JWT, arquitectura limpia y tests automatizados.
 
-------------------------------------------------------------------------
+---
+
+## 🎥 Demo
+
+![Demo API](docs/Animation.gif)
+
+---
+
+## 🚀 Demo rápida
+
+1. Regístrate  
+2. Haz login  
+3. Crea gastos  
+4. Consulta analytics mensual  
+
+👉 Documentación interactiva (Swagger):  
+http://127.0.0.1:8000/docs
+
+---
 
 ## 🎯 Objetivo
 
 Construir una API realista que demuestre:
 
--   Autenticación segura
--   Gestión de datos por usuario
--   Arquitectura escalable
--   Testing fiable
+- Autenticación segura con JWT  
+- Gestión de datos por usuario  
+- Arquitectura limpia (routes / services / models)  
+- Testing automatizado  
 
-------------------------------------------------------------------------
+---
 
-## 🧱 Stack
+## 🛠️ Stack
 
--   FastAPI
--   PostgreSQL
--   SQLAlchemy
--   Pydantic v2
--   Passlib (bcrypt)
--   python-jose (JWT)
--   Pytest
+- FastAPI  
+- SQLAlchemy  
+- SQLite  
+- JWT (python-jose)  
+- Passlib (hash de contraseñas)  
+- Pytest  
 
-------------------------------------------------------------------------
+---
 
 ## 📁 Estructura
 
-    app/
-     ├── api/        # Rutas y dependencias
-     ├── core/       # Configuración y seguridad
-     ├── db/         # Conexión a base de datos
-     ├── models/     # Modelos SQLAlchemy
-     ├── schemas/    # Validación (Pydantic)
-     └── services/   # Lógica de negocio
-
-    tests/           # Suite de tests
-
-------------------------------------------------------------------------
-
-## 🔐 Autenticación
-
-Flujo:
-
-1.  Register → crea usuario
-2.  Login → devuelve JWT
-3.  Requests protegidas → requieren token
-
-------------------------------------------------------------------------
-
-## 💸 Endpoints principales
-
-### Auth
-
--   `POST /users/register`
--   `POST /users/login`
--   `GET /users/me`
-
-### Expenses
-
--   `POST /expenses`
--   `GET /expenses`
--   `PUT /expenses/{id}`
--   `DELETE /expenses/{id}`
-
-### Analytics
-
--   `GET /expenses/analytics/monthly`
-
-------------------------------------------------------------------------
-
-## 🧠 Decisiones técnicas
-
-### ✔ Uso de Decimal
-
-Se utiliza `Decimal` en lugar de `float` para evitar errores de
-precisión en valores monetarios.
-
-------------------------------------------------------------------------
-
-### ✔ Seguridad por diseño
-
-Se devuelve `404` en lugar de `403` cuando un usuario accede a recursos
-ajenos.
-
-👉 Evita revelar la existencia de datos de otros usuarios.
-
-------------------------------------------------------------------------
-
-### ✔ Arquitectura desacoplada
-
--   **routes** → capa HTTP
--   **services** → lógica de negocio
--   **models** → persistencia
-
-👉 Facilita testing y mantenimiento.
-
-------------------------------------------------------------------------
-
-## 🧪 Testing
-
--   Base de datos aislada por test
--   Override de dependencias
--   Cobertura de auth, CRUD y seguridad
-
-Ejecutar tests:
-
-``` bash
-pytest -v
+```
+app/
+ ├── api/
+ ├── core/
+ ├── db/
+ ├── models/
+ ├── schemas/
+ ├── services/
+tests/
 ```
 
-------------------------------------------------------------------------
+---
 
-## ▶️ Ejecutar proyecto
+## ⚙️ Instalación
 
-``` bash
+### 🪟 Windows
+
+```bash
+git clone https://github.com/Marcial-Godes/expense-tracker-api.git
+cd expense-tracker-api
+
+python -m venv .venv
+.venv\Scripts\activate
+
+pip install -r requirements.txt
+
 uvicorn app.main:app --reload
 ```
 
-------------------------------------------------------------------------
+---
 
-## 🎯 Estado
+## 🔐 Configuración
 
-✔ Listo para portfolio\
-✔ Listo para entrevistas backend junior\
-✔ Código limpio, probado y estructurado
-# expense-tracker-api
-# expense-tracker-api
+El proyecto incluye un archivo `.env.example` con valores por defecto:
+
+```
+DATABASE_URL=sqlite:///./test.db
+SECRET_KEY=your_secret_key_here
+```
+
+👉 No es obligatorio crear `.env`, la aplicación funciona con valores por defecto.
+
+---
+
+## 🧪 Tests
+
+```bash
+pytest -v
+```
+
+✔ Todos los tests deben pasar
+
+---
+
+## 📌 Endpoints principales
+
+### Auth
+- `POST /users/register`
+- `POST /users/login`
+
+### Expenses
+- `POST /expenses/`
+- `GET /expenses/`
+- `PUT /expenses/{id}`
+- `DELETE /expenses/{id}`
+
+### Analytics
+- `GET /expenses/analytics/monthly`
+
+---
+
+## 🧠 Decisiones técnicas
+
+- Uso de **Decimal** para evitar errores de precisión  
+- Separación en capas (API / Service / DB)  
+- Validación con Pydantic  
+- Control de acceso por usuario  
+
+---
+
+## 📈 Estado
+
+✔ Proyecto funcional  
+✔ Tests pasando  
+✔ Setup reproducible  
+✔ Sin necesidad de configuración adicional  
+
+---
+
+## 👨‍💻 Autor
+
+Marcial Godes
