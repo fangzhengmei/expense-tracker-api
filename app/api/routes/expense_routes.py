@@ -10,6 +10,8 @@ from app.services.expense_service import (
     delete_expense_by_user,
     update_expense_by_user,
     get_monthly_expenses,
+    get_expenses_summary_by_currency,
+    get_expense_by_user,
     ExpenseNotFoundError
 )
 
@@ -28,6 +30,7 @@ def create_expense_endpoint(
     return create_expense(
         db,
         amount=expense.amount,
+        currency=expense.currency,
         description=expense.description,
         user_id=user.id
     )
@@ -39,6 +42,18 @@ def list_expenses(
     db: Session = Depends(get_db)
 ):
     return get_expenses_by_user(db, user.id)
+
+
+@router.get("/{id}")
+def get_expense(
+    id: int,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    expense = get_expense_by_user(db, id, user.id)
+    if not expense:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado")
+    return expense
 
 
 @router.delete("/{id}")
@@ -67,6 +82,7 @@ def update_expense_endpoint(
             expense_id=id,
             user_id=user.id,
             amount=expense.amount,
+            currency=expense.currency,
             description=expense.description
         )
     except ExpenseNotFoundError:
@@ -79,3 +95,11 @@ def get_monthly_analytics(
     db: Session = Depends(get_db)
 ):
     return get_monthly_expenses(db, user.id)
+
+
+@router.get("/analytics/currency")
+def get_currency_analytics(
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return get_expenses_summary_by_currency(db, user.id)

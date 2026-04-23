@@ -5,6 +5,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
+from app.core.constants import DEFAULT_CURRENCY, SUPPORTED_CURRENCIES
 
 
 
@@ -14,6 +15,8 @@ class Expense(Base):
     id = Column(Integer, primary_key=True)
 
     amount = Column(Numeric(10, 2), nullable=False)
+
+    currency = Column(String(3), nullable=False, default=DEFAULT_CURRENCY)
 
     description = Column(String(255), nullable=False)
 
