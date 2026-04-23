@@ -280,3 +280,328 @@ def test_overdue_summary(client):
     assert data["total_overdue_count"] == 2
     assert data["total_overdue_amount"] == 200
     assert len(data["overdues"]) == 2
+
+
+def test_budget_amount_zero(client):
+    token = create_user_and_login(client, email="budget_zero@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    budget_res = create_budget(client, token, category_id=category_id, amount=0)
+
+    assert budget_res.status_code == 200
+    assert budget_res.json()["amount"] == 0
+
+
+def test_create_expense_with_nonexistent_category(client):
+    token = create_user_and_login(client, email="nonexistent_category@test.com")
+
+    response = client.post(
+        "/expenses/",
+        json={
+            "amount": 100,
+            "description": "测试",
+            "category_id": 99999
+        },
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 400
+    assert "不存在" in response.json()["detail"]
+
+
+def test_create_expense_with_other_users_category(client):
+    token1 = create_user_and_login(client, email="user_a@test.com")
+    token2 = create_user_and_login(client, email="user_b@test.com")
+
+    category_res = create_category(client, token1, name="用户A的分类")
+    category_id = category_res.json()["id"]
+
+    response = client.post(
+        "/expenses/",
+        json={
+            "amount": 100,
+            "description": "测试",
+            "category_id": category_id
+        },
+        headers=auth_headers(token2)
+    )
+
+    assert response.status_code == 400
+    assert "不存在" in response.json()["detail"]
+
+
+def test_create_budget_with_nonexistent_category(client):
+    token = create_user_and_login(client, email="budget_nonexistent_cat@test.com")
+
+    from datetime import datetime
+    now = datetime.now()
+
+    response = client.post(
+        "/budgets/",
+        json={
+            "amount": 1000,
+            "year": now.year,
+            "month": now.month,
+            "category_id": 99999
+        },
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 404
+    assert "分类不存在" in response.json()["detail"]
+
+
+def test_create_budget_with_other_users_category(client):
+    token1 = create_user_and_login(client, email="user_c@test.com")
+    token2 = create_user_and_login(client, email="user_d@test.com")
+
+    category_res = create_category(client, token1, name="用户C的分类")
+    category_id = category_res.json()["id"]
+
+    from datetime import datetime
+    now = datetime.now()
+
+    response = client.post(
+        "/budgets/",
+        json={
+            "amount": 1000,
+            "year": now.year,
+            "month": now.month,
+            "category_id": category_id
+        },
+        headers=auth_headers(token2)
+    )
+
+    assert response.status_code == 404
+    assert "分类不存在" in response.json()["detail"]
+
+
+def test_duplicate_category_name(client):
+    token = create_user_and_login(client, email="duplicate_cat@test.com")
+
+    create_category(client, token, name="餐饮")
+
+    response = create_category(client, token, name="餐饮")
+
+    assert response.status_code == 400
+    assert "已存在" in response.json()["detail"]
+
+
+def test_duplicate_budget(client):
+    token = create_user_and_login(client, email="duplicate_budget@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    from datetime import datetime
+    now = datetime.now()
+
+    create_budget(client, token, category_id=category_id, amount=1000)
+
+    response = client.post(
+        "/budgets/",
+        json={
+            "amount": 2000,
+            "year": now.year,
+            "month": now.month,
+            "category_id": category_id
+        },
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 400
+    assert "已存在" in response.json()["detail"]
+
+
+def test_budget_monthly_list(client):
+    token = create_user_and_login(client, email="budget_monthly@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    create_budget(client, token, category_id=category_id, amount=1000)
+
+    client.post(
+        "/expenses/",
+        json={
+            "amount": 300,
+            "description": "午餐",
+            "category_id": category_id
+        },
+        headers=auth_headers(token)
+    )
+
+    response = client.get(
+        "/budgets/monthly",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert len(data) == 1
+    assert data[0]["amount"] == 1000
+    assert data[0]["spent"] == 300
+    assert data[0]["remaining"] == 700
+    assert data[0]["percentage"] == 30.0
+
+
+def test_expense_update_with_category_change(client):
+    token = create_user_and_login(client, email="expense_cat_change@test.com")
+
+    category1_res = create_category(client, token, name="餐饮")
+    category1_id = category1_res.json()["id"]
+
+    category2_res = create_category(client, token, name="交通")
+    category2_id = category2_res.json()["id"]
+
+    expense_res = client.post(
+        "/expenses/",
+        json={
+            "amount": 100,
+            "description": "午餐",
+            "category_id": category1_id
+        },
+        headers=auth_headers(token)
+    )
+    expense_id = expense_res.json()["expense"]["id"]
+
+    update_res = client.put(
+        f"/expenses/{expense_id}",
+        json={
+            "category_id": category2_id
+        },
+        headers=auth_headers(token)
+    )
+
+    assert update_res.status_code == 200
+    assert update_res.json()["expense"]["category_id"] == category2_id
+
+
+def test_expense_remove_category(client):
+    token = create_user_and_login(client, email="expense_remove_cat@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    expense_res = client.post(
+        "/expenses/",
+        json={
+            "amount": 100,
+            "description": "午餐",
+            "category_id": category_id
+        },
+        headers=auth_headers(token)
+    )
+    expense_id = expense_res.json()["expense"]["id"]
+
+    update_res = client.put(
+        f"/expenses/{expense_id}",
+        json={
+            "category_id": 0
+        },
+        headers=auth_headers(token)
+    )
+
+    assert update_res.status_code == 200
+    assert update_res.json()["expense"]["category_id"] is None
+
+
+def test_get_single_category(client):
+    token = create_user_and_login(client, email="single_cat@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    response = client.get(
+        f"/categories/{category_id}",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "餐饮"
+
+
+def test_get_nonexistent_category(client):
+    token = create_user_and_login(client, email="nonexistent_cat_get@test.com")
+
+    response = client.get(
+        "/categories/99999",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 404
+    assert "分类不存在" in response.json()["detail"]
+
+
+def test_update_category(client):
+    token = create_user_and_login(client, email="update_cat@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    response = client.put(
+        f"/categories/{category_id}",
+        json={
+            "name": "美食",
+            "color": "#FF0000"
+        },
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "美食"
+    assert response.json()["color"] == "#FF0000"
+
+
+def test_delete_category(client):
+    token = create_user_and_login(client, email="delete_cat@test.com")
+
+    category_res = create_category(client, token, name="测试分类")
+    category_id = category_res.json()["id"]
+
+    response = client.delete(
+        f"/categories/{category_id}",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+
+    get_response = client.get(
+        f"/categories/{category_id}",
+        headers=auth_headers(token)
+    )
+    assert get_response.status_code == 404
+
+
+def test_budget_summary_without_budgets(client):
+    token = create_user_and_login(client, email="summary_no_budget@test.com")
+
+    response = client.get(
+        "/budgets/summary",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_budget"] == 0
+    assert data["total_spent"] == 0
+    assert data["total_remaining"] == 0
+    assert len(data["budgets"]) == 0
+
+
+def test_overdue_summary_without_overdues(client):
+    token = create_user_and_login(client, email="overdue_no_overdues@test.com")
+
+    response = client.get(
+        "/budgets/overdue/summary",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_overdue_count"] == 0
+    assert data["total_overdue_amount"] == 0
+    assert len(data["overdues"]) == 0
