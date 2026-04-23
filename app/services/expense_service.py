@@ -9,6 +9,8 @@ from app.services.exchange_rate_service import (
     get_rate,
     convert_amount,
     get_user_rates,
+    UnsupportedCurrencyError,
+    is_supported_currency,
 )
 
 
@@ -147,6 +149,9 @@ def get_monthly_expenses_converted(db, user_id, target_currency: Optional[str] =
     if target_currency is None:
         target_currency = user.default_currency if user else DEFAULT_CURRENCY
     
+    if not is_supported_currency(target_currency):
+        raise UnsupportedCurrencyError(target_currency)
+    
     db_url = str(db.bind.url)
 
     if "sqlite" in db_url:
@@ -167,12 +172,12 @@ def get_monthly_expenses_converted(db, user_id, target_currency: Optional[str] =
     )
 
     monthly_data = {}
+    errors = []
+    
     for row in results:
         month = row.month
         currency = row.currency
         total = Decimal(str(row.total or 0))
-        
-        converted_total = convert_amount(db, total, currency, target_currency, user_id)
         
         if month not in monthly_data:
             monthly_data[month] = {
@@ -182,17 +187,39 @@ def get_monthly_expenses_converted(db, user_id, target_currency: Optional[str] =
                 "totals_by_currency": {}
             }
         
-        monthly_data[month]["totals_by_currency"][currency] = {
-            "original_amount": float(total),
-            "converted_amount": float(converted_total)
-        }
-        monthly_data[month]["total_converted"] += converted_total
+        try:
+            converted_total = convert_amount(db, total, currency, target_currency, user_id)
+            
+            monthly_data[month]["totals_by_currency"][currency] = {
+                "original_amount": float(total),
+                "converted_amount": float(converted_total)
+            }
+            monthly_data[month]["total_converted"] += converted_total
+        except UnsupportedCurrencyError as e:
+            errors.append({
+                "month": month,
+                "currency": currency,
+                "amount": float(total),
+                "error": str(e)
+            })
+            monthly_data[month]["totals_by_currency"][currency] = {
+                "original_amount": float(total),
+                "converted_amount": None,
+                "error": f"Unsupported currency: {currency}"
+            }
 
     result_list = []
     for month in sorted(monthly_data.keys()):
         data = monthly_data[month]
         data["total_converted"] = float(data["total_converted"])
         result_list.append(data)
+    
+    if errors:
+        return {
+            "data": result_list,
+            "warnings": errors,
+            "note": "Some expenses could not be converted due to unsupported currencies"
+        }
 
     return result_list
 
@@ -201,6 +228,9 @@ def get_expenses_summary_converted(db, user_id, target_currency: Optional[str] =
     user = db.query(User).filter(User.id == user_id).first()
     if target_currency is None:
         target_currency = user.default_currency if user else DEFAULT_CURRENCY
+    
+    if not is_supported_currency(target_currency):
+        raise UnsupportedCurrencyError(target_currency)
     
     results = (
         db.query(
@@ -215,27 +245,49 @@ def get_expenses_summary_converted(db, user_id, target_currency: Optional[str] =
 
     total_converted = Decimal("0")
     breakdown = []
+    errors = []
     
     for row in results:
         currency = row.currency
         original_amount = Decimal(str(row.total or 0))
         count = row.count
         
-        converted_amount = convert_amount(db, original_amount, currency, target_currency, user_id)
-        total_converted += converted_amount
-        
-        breakdown.append({
-            "currency": currency,
-            "original_amount": float(original_amount),
-            "converted_amount": float(converted_amount),
-            "count": count
-        })
+        try:
+            converted_amount = convert_amount(db, original_amount, currency, target_currency, user_id)
+            total_converted += converted_amount
+            
+            breakdown.append({
+                "currency": currency,
+                "original_amount": float(original_amount),
+                "converted_amount": float(converted_amount),
+                "count": count
+            })
+        except UnsupportedCurrencyError as e:
+            errors.append({
+                "currency": currency,
+                "amount": float(original_amount),
+                "count": count,
+                "error": str(e)
+            })
+            breakdown.append({
+                "currency": currency,
+                "original_amount": float(original_amount),
+                "converted_amount": None,
+                "count": count,
+                "error": f"Unsupported currency: {currency}"
+            })
 
-    return {
+    result = {
         "target_currency": target_currency,
         "total_converted": float(total_converted),
         "breakdown": breakdown
     }
+    
+    if errors:
+        result["warnings"] = errors
+        result["note"] = "Some expenses could not be converted due to unsupported currencies"
+
+    return result
 
 
 def get_all_expenses_with_conversion(db, user_id, target_currency: Optional[str] = None):
@@ -243,32 +295,63 @@ def get_all_expenses_with_conversion(db, user_id, target_currency: Optional[str]
     if target_currency is None:
         target_currency = user.default_currency if user else DEFAULT_CURRENCY
     
+    if not is_supported_currency(target_currency):
+        raise UnsupportedCurrencyError(target_currency)
+    
     expenses = get_expenses_by_user(db, user_id)
     
     result = []
+    errors = []
+    
     for expense in expenses:
-        converted_amount = convert_amount(
-            db, 
-            Decimal(str(expense.amount)), 
-            expense.currency, 
-            target_currency, 
-            user_id
-        )
-        
-        rate = get_rate(db, expense.currency, user_id)
-        target_rate = get_rate(db, target_currency, user_id)
-        exchange_rate = rate / target_rate if target_rate != 0 else Decimal("0")
-        
-        result.append({
-            "id": expense.id,
-            "original_amount": float(expense.amount),
-            "original_currency": expense.currency,
-            "converted_amount": float(converted_amount),
-            "target_currency": target_currency,
-            "exchange_rate": float(exchange_rate.quantize(Decimal("0.000001"))),
-            "description": expense.description,
-            "created_at": expense.created_at.isoformat() if expense.created_at else None
-        })
+        try:
+            converted_amount = convert_amount(
+                db, 
+                Decimal(str(expense.amount)), 
+                expense.currency, 
+                target_currency, 
+                user_id
+            )
+            
+            rate = get_rate(db, expense.currency, user_id)
+            target_rate = get_rate(db, target_currency, user_id)
+            exchange_rate = rate / target_rate if target_rate != 0 else Decimal("0")
+            
+            result.append({
+                "id": expense.id,
+                "original_amount": float(expense.amount),
+                "original_currency": expense.currency,
+                "converted_amount": float(converted_amount),
+                "target_currency": target_currency,
+                "exchange_rate": float(exchange_rate.quantize(Decimal("0.000001"))),
+                "description": expense.description,
+                "created_at": expense.created_at.isoformat() if expense.created_at else None
+            })
+        except UnsupportedCurrencyError as e:
+            errors.append({
+                "expense_id": expense.id,
+                "currency": expense.currency,
+                "amount": float(expense.amount),
+                "error": str(e)
+            })
+            result.append({
+                "id": expense.id,
+                "original_amount": float(expense.amount),
+                "original_currency": expense.currency,
+                "converted_amount": None,
+                "target_currency": target_currency,
+                "exchange_rate": None,
+                "description": expense.description,
+                "created_at": expense.created_at.isoformat() if expense.created_at else None,
+                "error": f"Unsupported currency: {expense.currency}"
+            })
+    
+    if errors:
+        return {
+            "data": result,
+            "warnings": errors,
+            "note": "Some expenses could not be converted due to unsupported currencies"
+        }
     
     return result
     

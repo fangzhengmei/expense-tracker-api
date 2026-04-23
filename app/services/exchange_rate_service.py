@@ -25,8 +25,21 @@ class ExchangeRateNotFoundError(Exception):
     pass
 
 
+class UnsupportedCurrencyError(Exception):
+    def __init__(self, currency: str):
+        self.currency = currency
+        super().__init__(f"Unsupported currency: {currency}")
+
+
+def is_supported_currency(currency: str) -> bool:
+    return currency.upper() in SUPPORTED_CURRENCIES
+
+
 def get_default_rate(currency: str) -> Decimal:
-    return DEFAULT_EXCHANGE_RATES.get(currency.upper(), Decimal("1.0"))
+    currency_upper = currency.upper()
+    if currency_upper not in DEFAULT_EXCHANGE_RATES:
+        raise UnsupportedCurrencyError(currency)
+    return DEFAULT_EXCHANGE_RATES[currency_upper]
 
 
 def get_user_rates(db, user_id: int) -> Dict[str, Decimal]:
@@ -48,6 +61,9 @@ def get_user_rates(db, user_id: int) -> Dict[str, Decimal]:
 def get_rate(db, currency: str, user_id: Optional[int] = None) -> Decimal:
     currency = currency.upper()
     
+    if not is_supported_currency(currency):
+        raise UnsupportedCurrencyError(currency)
+    
     if currency == DEFAULT_CURRENCY:
         return Decimal("1.0")
     
@@ -57,6 +73,8 @@ def get_rate(db, currency: str, user_id: Optional[int] = None) -> Decimal:
             ExchangeRate.user_id == user_id
         ).first()
         if user_rate:
+            if user_rate.rate_to_cny <= Decimal("0"):
+                raise ValueError(f"Invalid exchange rate for {currency}: rate must be positive")
             return user_rate.rate_to_cny
     
     default_rate = db.query(ExchangeRate).filter(
@@ -64,6 +82,8 @@ def get_rate(db, currency: str, user_id: Optional[int] = None) -> Decimal:
         ExchangeRate.is_default == 1
     ).first()
     if default_rate:
+        if default_rate.rate_to_cny <= Decimal("0"):
+            raise ValueError(f"Invalid exchange rate for {currency}: rate must be positive")
         return default_rate.rate_to_cny
     
     return get_default_rate(currency)
@@ -76,11 +96,17 @@ def convert_amount(
     to_currency: str,
     user_id: Optional[int] = None
 ) -> Decimal:
+    if amount < Decimal("0"):
+        raise ValueError("Amount cannot be negative")
+    
     if from_currency == to_currency:
-        return amount
+        return amount.quantize(Decimal("0.01"))
     
     from_rate = get_rate(db, from_currency, user_id)
     to_rate = get_rate(db, to_currency, user_id)
+    
+    if to_rate <= Decimal("0"):
+        raise ValueError(f"Invalid exchange rate for {to_currency}: rate must be positive")
     
     amount_in_cny = amount * from_rate
     converted_amount = amount_in_cny / to_rate
@@ -96,6 +122,12 @@ def set_exchange_rate(
     is_default: bool = False
 ) -> ExchangeRate:
     currency = currency.upper()
+    
+    if not is_supported_currency(currency):
+        raise UnsupportedCurrencyError(currency)
+    
+    if rate_to_cny <= Decimal("0"):
+        raise ValueError("Exchange rate must be positive")
     
     existing = db.query(ExchangeRate).filter(
         ExchangeRate.currency == currency,
