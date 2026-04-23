@@ -8,11 +8,13 @@ class ExpenseCreate(BaseModel):
     amount: Decimal = Field(..., ge=0)
     description: str = Field(..., min_length=1, max_length=255)
     ledger_id: Optional[int] = Field(None, ge=1, description="账本ID，可选。如果不提供，将使用个人账本")
+    category_id: Optional[int] = Field(None, ge=1, description="分类ID，可选")
 
 
 class ExpenseUpdate(BaseModel):
     amount: Decimal | None = Field(None, ge=0)
     description: str | None = Field(None, min_length=1, max_length=255)
+    category_id: Optional[int] = Field(None, ge=1, description="分类ID，可选")
 
 
 class ExpenseOut(BaseModel):
@@ -23,6 +25,9 @@ class ExpenseOut(BaseModel):
     description: str
     user_id: int
     ledger_id: int
+    category_id: Optional[int]
+    category_name: Optional[str] = None
+    category_color: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -36,5 +41,8 @@ class ExpenseWithUserOut(BaseModel):
     user_id: int
     user_email: str
     ledger_id: int
+    category_id: Optional[int]
+    category_name: Optional[str] = None
+    category_color: Optional[str] = None
     created_at: datetime
     updated_at: datetime

@@ -8,6 +8,7 @@ from sqlalchemy import func
 
 from app.models.ledger import Ledger, LedgerMember, Invitation, LedgerType, MemberRole
 from app.models.user import User
+from app.services.category_service import create_default_categories
 
 
 class LedgerError(Exception):
@@ -68,6 +69,10 @@ def create_personal_ledger(db: Session, user_id: int) -> Ledger:
         role=MemberRole.OWNER
     )
     db.add(member)
+    db.flush()
+
+    create_default_categories(db, ledger.id)
+
     db.commit()
     db.refresh(ledger)
 
@@ -97,6 +102,10 @@ def create_ledger(
         role=MemberRole.OWNER
     )
     db.add(member)
+    db.flush()
+
+    create_default_categories(db, ledger.id)
+
     db.commit()
     db.refresh(ledger)
 

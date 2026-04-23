@@ -13,6 +13,12 @@ from app.schemas.ledger_schema import (
     JoinLedger
 )
 from app.schemas.expense_schema import ExpenseWithUserOut, ExpenseCreate, ExpenseUpdate
+from app.schemas.category_schema import (
+    CategoryCreate,
+    CategoryUpdate,
+    CategoryOut,
+    CategoryStats
+)
 from app.db.database import get_db
 from app.api.deps import get_current_user
 
@@ -46,13 +52,28 @@ from app.services.expense_service import (
     get_expenses_by_ledger,
     get_ledger_expense_summary,
     get_monthly_expenses_by_ledger,
+    get_expense_with_details,
     delete_expense,
     update_expense,
     ExpenseNotFoundError,
     UnauthorizedExpenseAccess
 )
 
+from app.services.category_service import (
+    get_ledger_categories,
+    get_category_by_id,
+    create_category as create_category_service,
+    update_category as update_category_service,
+    deactivate_category,
+    get_category_stats_with_percentage,
+    get_monthly_category_stats,
+    CategoryError,
+    CategoryNotFoundError,
+    CannotModifyDefaultCategoryError
+)
+
 from app.models.ledger import LedgerType
+from app.models.category import CategoryType
 
 
 router = APIRouter()
@@ -75,6 +96,15 @@ def handle_ledger_error(e: LedgerError) -> HTTPException:
         return HTTPException(status_code=400, detail="你已经是该账本的成员")
     elif isinstance(e, CannotRemoveOwnerError):
         return HTTPException(status_code=400, detail="无法移除账本所有者或需要至少一个所有者")
+    else:
+        return HTTPException(status_code=500, detail=str(e))
+
+
+def handle_category_error(e: CategoryError) -> HTTPException:
+    if isinstance(e, CategoryNotFoundError):
+        return HTTPException(status_code=404, detail="分类不存在")
+    elif isinstance(e, CannotModifyDefaultCategoryError):
+        return HTTPException(status_code=400, detail="无法修改或删除默认分类")
     else:
         return HTTPException(status_code=500, detail=str(e))
 
@@ -398,6 +428,187 @@ def join_ledger_endpoint(
         raise handle_ledger_error(e)
 
 
+@router.get("/{ledger_id}/categories", response_model=list[CategoryOut])
+def list_ledger_categories(
+    ledger_id: int,
+    category_type: Optional[CategoryType] = Query(None, description="分类类型：expense 支出，income 收入"),
+    include_inactive: bool = Query(False, description="是否包含已禁用的分类"),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        from app.services.ledger_service import check_member_access
+        check_member_access(db, ledger_id, user.id)
+
+        categories = get_ledger_categories(db, ledger_id, category_type, include_inactive)
+
+        return [
+            CategoryOut(
+                id=cat.id,
+                name=cat.name,
+                type=cat.type,
+                color=cat.color,
+                icon=cat.icon,
+                sort_order=cat.sort_order,
+                is_default=cat.is_default,
+                is_active=cat.is_active,
+                ledger_id=cat.ledger_id,
+                created_at=cat.created_at,
+                updated_at=cat.updated_at
+            )
+            for cat in categories
+        ]
+    except LedgerError as e:
+        raise handle_ledger_error(e)
+
+
+@router.post("/{ledger_id}/categories", response_model=CategoryOut)
+def create_category_endpoint(
+    ledger_id: int,
+    category: CategoryCreate,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        from app.services.ledger_service import check_admin_access
+        check_admin_access(db, ledger_id, user.id)
+
+        new_category = create_category_service(
+            db,
+            ledger_id=ledger_id,
+            name=category.name,
+            category_type=category.type,
+            color=category.color,
+            icon=category.icon,
+            sort_order=category.sort_order
+        )
+
+        return CategoryOut(
+            id=new_category.id,
+            name=new_category.name,
+            type=new_category.type,
+            color=new_category.color,
+            icon=new_category.icon,
+            sort_order=new_category.sort_order,
+            is_default=new_category.is_default,
+            is_active=new_category.is_active,
+            ledger_id=new_category.ledger_id,
+            created_at=new_category.created_at,
+            updated_at=new_category.updated_at
+        )
+    except LedgerError as e:
+        raise handle_ledger_error(e)
+
+
+@router.put("/{ledger_id}/categories/{category_id}", response_model=CategoryOut)
+def update_category_endpoint(
+    ledger_id: int,
+    category_id: int,
+    category: CategoryUpdate,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        from app.services.ledger_service import check_admin_access
+        check_admin_access(db, ledger_id, user.id)
+
+        updated_category = update_category_service(
+            db,
+            category_id=category_id,
+            name=category.name,
+            color=category.color,
+            icon=category.icon,
+            sort_order=category.sort_order,
+            is_active=category.is_active
+        )
+
+        return CategoryOut(
+            id=updated_category.id,
+            name=updated_category.name,
+            type=updated_category.type,
+            color=updated_category.color,
+            icon=updated_category.icon,
+            sort_order=updated_category.sort_order,
+            is_default=updated_category.is_default,
+            is_active=updated_category.is_active,
+            ledger_id=updated_category.ledger_id,
+            created_at=updated_category.created_at,
+            updated_at=updated_category.updated_at
+        )
+    except LedgerError as e:
+        raise handle_ledger_error(e)
+    except CategoryError as e:
+        raise handle_category_error(e)
+
+
+@router.delete("/{ledger_id}/categories/{category_id}")
+def delete_category_endpoint(
+    ledger_id: int,
+    category_id: int,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        from app.services.ledger_service import check_admin_access
+        check_admin_access(db, ledger_id, user.id)
+
+        deactivate_category(db, category_id)
+        return {"message": "分类已删除"}
+    except LedgerError as e:
+        raise handle_ledger_error(e)
+    except CategoryError as e:
+        raise handle_category_error(e)
+
+
+@router.get("/{ledger_id}/categories/stats", response_model=list[CategoryStats])
+def get_category_stats(
+    ledger_id: int,
+    category_type: CategoryType = Query(CategoryType.EXPENSE, description="分类类型：expense 支出，income 收入"),
+    start_date: Optional[str] = Query(None, description="开始日期，格式：YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日期，格式：YYYY-MM-DD"),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        from app.services.ledger_service import check_member_access
+        check_member_access(db, ledger_id, user.id)
+
+        total_amount, stats = get_category_stats_with_percentage(
+            db, ledger_id, category_type, start_date, end_date
+        )
+
+        return [
+            CategoryStats(
+                category_id=stat["category_id"],
+                category_name=stat["category_name"],
+                category_color=stat["category_color"],
+                category_icon=stat["category_icon"],
+                total_amount=stat["total_amount"],
+                count=stat["count"],
+                percentage=stat["percentage"]
+            )
+            for stat in stats
+        ]
+    except LedgerError as e:
+        raise handle_ledger_error(e)
+
+
+@router.get("/{ledger_id}/categories/stats/monthly")
+def get_monthly_category_stats_endpoint(
+    ledger_id: int,
+    category_type: CategoryType = Query(CategoryType.EXPENSE, description="分类类型：expense 支出，income 收入"),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        from app.services.ledger_service import check_member_access
+        check_member_access(db, ledger_id, user.id)
+
+        return get_monthly_category_stats(db, ledger_id, category_type)
+    except LedgerError as e:
+        raise handle_ledger_error(e)
+
+
 @router.post("/{ledger_id}/expenses", response_model=ExpenseWithUserOut)
 def create_expense_in_ledger(
     ledger_id: int,
@@ -414,8 +625,26 @@ def create_expense_in_ledger(
             amount=expense.amount,
             description=expense.description,
             user_id=user.id,
-            ledger_id=ledger_id
+            ledger_id=ledger_id,
+            category_id=expense.category_id
         )
+
+        expense_details = get_expense_with_details(db, new_expense.id)
+        if expense_details:
+            exp, email, category_name, category_color = expense_details
+            return ExpenseWithUserOut(
+                id=exp.id,
+                amount=exp.amount,
+                description=exp.description,
+                user_id=exp.user_id,
+                user_email=email,
+                ledger_id=exp.ledger_id,
+                category_id=exp.category_id,
+                category_name=category_name,
+                category_color=category_color,
+                created_at=exp.created_at,
+                updated_at=exp.updated_at
+            )
 
         return ExpenseWithUserOut(
             id=new_expense.id,
@@ -424,6 +653,7 @@ def create_expense_in_ledger(
             user_id=new_expense.user_id,
             user_email=user.email,
             ledger_id=new_expense.ledger_id,
+            category_id=new_expense.category_id,
             created_at=new_expense.created_at,
             updated_at=new_expense.updated_at
         )
@@ -450,10 +680,13 @@ def list_ledger_expenses(
                 user_id=expense.user_id,
                 user_email=email,
                 ledger_id=expense.ledger_id,
+                category_id=expense.category_id,
+                category_name=category_name,
+                category_color=category_color,
                 created_at=expense.created_at,
                 updated_at=expense.updated_at
             )
-            for expense, email in expenses
+            for expense, email, category_name, category_color in expenses
         ]
     except LedgerError as e:
         raise handle_ledger_error(e)
@@ -500,8 +733,26 @@ def update_expense_in_ledger(
             expense_id=expense_id,
             user_id=user.id,
             amount=expense.amount,
-            description=expense.description
+            description=expense.description,
+            category_id=expense.category_id
         )
+
+        expense_details = get_expense_with_details(db, updated_expense.id)
+        if expense_details:
+            exp, email, category_name, category_color = expense_details
+            return ExpenseWithUserOut(
+                id=exp.id,
+                amount=exp.amount,
+                description=exp.description,
+                user_id=exp.user_id,
+                user_email=email,
+                ledger_id=exp.ledger_id,
+                category_id=exp.category_id,
+                category_name=category_name,
+                category_color=category_color,
+                created_at=exp.created_at,
+                updated_at=exp.updated_at
+            )
 
         from app.models.user import User
         expense_user = db.query(User).filter(User.id == updated_expense.user_id).first()
@@ -513,6 +764,7 @@ def update_expense_in_ledger(
             user_id=updated_expense.user_id,
             user_email=expense_user.email if expense_user else "",
             ledger_id=updated_expense.ledger_id,
+            category_id=updated_expense.category_id,
             created_at=updated_expense.created_at,
             updated_at=updated_expense.updated_at
         )

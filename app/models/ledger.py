@@ -47,6 +47,7 @@ class Ledger(Base):
     members = relationship("LedgerMember", back_populates="ledger", cascade="all, delete-orphan")
     expenses = relationship("Expense", back_populates="ledger")
     invitations = relationship("Invitation", back_populates="ledger", cascade="all, delete-orphan")
+    categories = relationship("Category", back_populates="ledger", cascade="all, delete-orphan")
 
 
 class LedgerMember(Base):

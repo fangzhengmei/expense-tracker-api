@@ -1,9 +1,11 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
+from decimal import Decimal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.expense import Expense
 from app.models.user import User
+from app.models.category import Category
 from app.services.ledger_service import (
     is_member,
     is_admin_or_higher,
@@ -27,7 +29,8 @@ def create_expense(
     amount: float,
     description: str,
     user_id: int,
-    ledger_id: int
+    ledger_id: int,
+    category_id: Optional[int] = None
 ) -> Expense:
     if not is_member(db, ledger_id, user_id):
         raise NotMemberError()
@@ -40,7 +43,8 @@ def create_expense(
         amount=amount,
         description=description,
         user_id=user_id,
-        ledger_id=ledger_id
+        ledger_id=ledger_id,
+        category_id=category_id
     )
 
     db.add(expense)
@@ -61,8 +65,14 @@ def get_expenses_by_ledger(
         raise NotMemberError()
 
     results = (
-        db.query(Expense, User.email)
+        db.query(
+            Expense,
+            User.email,
+            Category.name.label("category_name"),
+            Category.color.label("category_color")
+        )
         .join(User, Expense.user_id == User.id)
+        .outerjoin(Category, Expense.category_id == Category.id)
         .filter(Expense.ledger_id == ledger_id)
         .order_by(Expense.created_at.desc())
         .offset(offset)
@@ -78,6 +88,22 @@ def get_expenses_by_user(db: Session, user_id: int) -> List[Expense]:
 
 def get_expense_by_id(db: Session, expense_id: int) -> Optional[Expense]:
     return db.query(Expense).filter(Expense.id == expense_id).first()
+
+
+def get_expense_with_details(db: Session, expense_id: int) -> Optional[tuple]:
+    result = (
+        db.query(
+            Expense,
+            User.email,
+            Category.name.label("category_name"),
+            Category.color.label("category_color")
+        )
+        .join(User, Expense.user_id == User.id)
+        .outerjoin(Category, Expense.category_id == Category.id)
+        .filter(Expense.id == expense_id)
+        .first()
+    )
+    return result
 
 
 def can_edit_expense(
@@ -122,7 +148,8 @@ def update_expense(
     expense_id: int,
     user_id: int,
     amount: Optional[float] = None,
-    description: Optional[str] = None
+    description: Optional[str] = None,
+    category_id: Optional[int] = None
 ) -> Expense:
     expense = get_expense_by_id(db, expense_id)
 
@@ -137,6 +164,9 @@ def update_expense(
 
     if description is not None:
         expense.description = description
+
+    if category_id is not None:
+        expense.category_id = category_id
 
     db.commit()
     db.refresh(expense)
@@ -260,8 +290,42 @@ def get_ledger_expense_summary(
         .all()
     )
 
+    by_category = (
+        db.query(
+            Category.id.label("category_id"),
+            Category.name.label("category_name"),
+            Category.color.label("category_color"),
+            Category.icon.label("category_icon"),
+            func.sum(Expense.amount).label("total"),
+            func.count(Expense.id).label("count")
+        )
+        .outerjoin(Category, Expense.category_id == Category.id)
+        .filter(Expense.ledger_id == ledger_id)
+        .group_by(Category.id)
+        .order_by(Category.sort_order)
+        .all()
+    )
+
+    total = float(total_expense or 0)
+    category_with_percentage = []
+    for row in by_category:
+        category_total = float(row.total or 0)
+        percentage = 0.0
+        if total > 0:
+            percentage = category_total / total * 100
+
+        category_with_percentage.append({
+            "category_id": row.category_id,
+            "category_name": row.category_name or "未分类",
+            "category_color": row.category_color or "#6B7280",
+            "category_icon": row.category_icon,
+            "total": category_total,
+            "count": row.count or 0,
+            "percentage": round(percentage, 2)
+        })
+
     return {
-        "total": float(total_expense or 0),
+        "total": total,
         "count": expense_count or 0,
         "monthly": [
             {
@@ -279,5 +343,6 @@ def get_ledger_expense_summary(
                 "count": row.count or 0
             }
             for row in by_user
-        ]
+        ],
+        "by_category": category_with_percentage
     }

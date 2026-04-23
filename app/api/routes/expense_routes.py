@@ -14,6 +14,7 @@ from app.services.ledger_service import get_or_create_personal_ledger
 from app.services.expense_service import (
     create_expense as create_expense_service,
     get_expenses_by_ledger,
+    get_expense_with_details,
     delete_expense,
     update_expense,
     get_user_monthly_expenses
@@ -36,8 +37,25 @@ def create_expense_endpoint(
         amount=expense.amount,
         description=expense.description,
         user_id=user.id,
-        ledger_id=personal_ledger.id
+        ledger_id=personal_ledger.id,
+        category_id=expense.category_id
     )
+
+    expense_details = get_expense_with_details(db, new_expense.id)
+    if expense_details:
+        exp, email, category_name, category_color = expense_details
+        return ExpenseOut(
+            id=exp.id,
+            amount=exp.amount,
+            description=exp.description,
+            user_id=exp.user_id,
+            ledger_id=exp.ledger_id,
+            category_id=exp.category_id,
+            category_name=category_name,
+            category_color=category_color,
+            created_at=exp.created_at,
+            updated_at=exp.updated_at
+        )
 
     return ExpenseOut(
         id=new_expense.id,
@@ -45,6 +63,7 @@ def create_expense_endpoint(
         description=new_expense.description,
         user_id=new_expense.user_id,
         ledger_id=new_expense.ledger_id,
+        category_id=new_expense.category_id,
         created_at=new_expense.created_at,
         updated_at=new_expense.updated_at
     )
@@ -67,10 +86,13 @@ def list_expenses(
             user_id=expense.user_id,
             user_email=email,
             ledger_id=expense.ledger_id,
+            category_id=expense.category_id,
+            category_name=category_name,
+            category_color=category_color,
             created_at=expense.created_at,
             updated_at=expense.updated_at
         )
-        for expense, email in expenses
+        for expense, email, category_name, category_color in expenses
     ]
 
 
@@ -100,8 +122,25 @@ def update_expense_endpoint(
             expense_id=id,
             user_id=user.id,
             amount=expense.amount,
-            description=expense.description
+            description=expense.description,
+            category_id=expense.category_id
         )
+
+        expense_details = get_expense_with_details(db, updated_expense.id)
+        if expense_details:
+            exp, email, category_name, category_color = expense_details
+            return ExpenseOut(
+                id=exp.id,
+                amount=exp.amount,
+                description=exp.description,
+                user_id=exp.user_id,
+                ledger_id=exp.ledger_id,
+                category_id=exp.category_id,
+                category_name=category_name,
+                category_color=category_color,
+                created_at=exp.created_at,
+                updated_at=exp.updated_at
+            )
 
         return ExpenseOut(
             id=updated_expense.id,
@@ -109,6 +148,7 @@ def update_expense_endpoint(
             description=updated_expense.description,
             user_id=updated_expense.user_id,
             ledger_id=updated_expense.ledger_id,
+            category_id=updated_expense.category_id,
             created_at=updated_expense.created_at,
             updated_at=updated_expense.updated_at
         )
