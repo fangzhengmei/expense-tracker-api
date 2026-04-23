@@ -97,7 +97,11 @@ def update_expense_endpoint(
 
 @router.get("/analytics/monthly")
 def get_monthly_analytics(
+    status: ExpenseStatus | None = Query(
+        ExpenseStatus.APPROVED,
+        description="按审批状态筛选，默认只统计已通过的支出"
+    ),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return get_monthly_expenses(db, user.id)
+    return get_monthly_expenses(db, user.id, status=status)
