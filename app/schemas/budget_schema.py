@@ -46,3 +46,26 @@ class MonthlyBudgetSummary(BaseModel):
     total_spent: Decimal
     total_remaining: Decimal
     budgets: list[BudgetWithUsageOut]
+
+
+class OverdueBudgetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    amount: Decimal
+    year: int
+    month: int
+    category_id: int
+    category_name: str
+    spent: Decimal
+    remaining: Decimal
+    percentage: float
+    overdue_amount: Decimal
+
+
+class OverdueBudgetSummary(BaseModel):
+    year: int
+    month: int
+    total_overdue_count: int
+    total_overdue_amount: Decimal
+    overdues: list[OverdueBudgetOut]

@@ -191,3 +191,45 @@ def check_budget_availability(db, user_id, category_id, amount, year=None, month
         "will_exceed": will_exceed,
         "exceed_amount": exceed_amount
     }
+
+
+def get_overdue_budgets(db, user_id, year=None, month=None):
+    if year is None or month is None:
+        now = datetime.now()
+        year = now.year
+        month = now.month
+    
+    budgets = get_budgets_by_user_and_month(db, user_id, year, month)
+    
+    overdue_budgets = []
+    for budget in budgets:
+        budget_usage = get_budget_with_usage(db, budget)
+        if budget_usage["remaining"] < 0:
+            overdue_budget = {
+                **budget_usage,
+                "overdue_amount": abs(budget_usage["remaining"])
+            }
+            overdue_budgets.append(overdue_budget)
+    
+    return overdue_budgets
+
+
+def get_overdue_budget_summary(db, user_id, year=None, month=None):
+    if year is None or month is None:
+        now = datetime.now()
+        year = now.year
+        month = now.month
+    
+    overdues = get_overdue_budgets(db, user_id, year, month)
+    
+    total_overdue_amount = Decimal(0)
+    for overdue in overdues:
+        total_overdue_amount += overdue["overdue_amount"]
+    
+    return {
+        "year": year,
+        "month": month,
+        "total_overdue_count": len(overdues),
+        "total_overdue_amount": total_overdue_amount,
+        "overdues": overdues
+    }

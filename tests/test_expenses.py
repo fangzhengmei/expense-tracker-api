@@ -183,3 +183,100 @@ def test_budget_summary(client):
     assert data["total_spent"] == 300
     assert data["total_remaining"] == 700
     assert len(data["budgets"]) == 1
+
+
+def test_overdue_budgets_empty(client):
+    token = create_user_and_login(client, email="overdue_empty@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    create_budget(client, token, category_id=category_id, amount=1000)
+
+    response = client.get(
+        "/budgets/overdue",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 0
+
+
+def test_overdue_budgets_with_overdue(client):
+    token = create_user_and_login(client, email="overdue_test@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    create_budget(client, token, category_id=category_id, amount=500)
+
+    client.post(
+        "/expenses/",
+        json={
+            "amount": 600,
+            "description": "聚餐",
+            "category_id": category_id
+        },
+        headers=auth_headers(token)
+    )
+
+    response = client.get(
+        "/budgets/overdue",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["category_name"] == "餐饮"
+    assert data[0]["amount"] == 500
+    assert data[0]["spent"] == 600
+    assert data[0]["remaining"] == -100
+    assert data[0]["overdue_amount"] == 100
+    assert data[0]["percentage"] == 120.0
+
+
+def test_overdue_summary(client):
+    token = create_user_and_login(client, email="overdue_summary@test.com")
+
+    category1_res = create_category(client, token, name="餐饮")
+    category1_id = category1_res.json()["id"]
+
+    category2_res = create_category(client, token, name="娱乐")
+    category2_id = category2_res.json()["id"]
+
+    create_budget(client, token, category_id=category1_id, amount=500)
+    create_budget(client, token, category_id=category2_id, amount=300)
+
+    client.post(
+        "/expenses/",
+        json={
+            "amount": 600,
+            "description": "聚餐",
+            "category_id": category1_id
+        },
+        headers=auth_headers(token)
+    )
+
+    client.post(
+        "/expenses/",
+        json={
+            "amount": 400,
+            "description": "电影",
+            "category_id": category2_id
+        },
+        headers=auth_headers(token)
+    )
+
+    response = client.get(
+        "/budgets/overdue/summary",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert data["total_overdue_count"] == 2
+    assert data["total_overdue_amount"] == 200
+    assert len(data["overdues"]) == 2

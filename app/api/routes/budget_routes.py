@@ -8,7 +8,9 @@ from app.schemas.budget_schema import (
     BudgetUpdate, 
     BudgetOut, 
     BudgetWithUsageOut,
-    MonthlyBudgetSummary
+    MonthlyBudgetSummary,
+    OverdueBudgetOut,
+    OverdueBudgetSummary
 )
 from app.db.database import get_db
 
@@ -21,6 +23,8 @@ from app.services.budget_service import (
     delete_budget_by_user,
     get_budget_with_usage,
     get_monthly_budget_summary,
+    get_overdue_budgets,
+    get_overdue_budget_summary,
     BudgetNotFoundError,
     BudgetAlreadyExistsError
 )
@@ -143,3 +147,33 @@ def delete_budget_endpoint(
         return {"message": "预算已删除"}
     except BudgetNotFoundError:
         raise HTTPException(status_code=404, detail="预算不存在")
+
+
+@router.get("/overdue", response_model=list[OverdueBudgetOut])
+def list_overdue_budgets(
+    year: Optional[int] = Query(None, ge=2000, le=2100),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if year is None or month is None:
+        now = datetime.now()
+        year = year or now.year
+        month = month or now.month
+    
+    return get_overdue_budgets(db, user.id, year, month)
+
+
+@router.get("/overdue/summary", response_model=OverdueBudgetSummary)
+def get_overdue_summary(
+    year: Optional[int] = Query(None, ge=2000, le=2100),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if year is None or month is None:
+        now = datetime.now()
+        year = year or now.year
+        month = month or now.month
+    
+    return get_overdue_budget_summary(db, user.id, year, month)
