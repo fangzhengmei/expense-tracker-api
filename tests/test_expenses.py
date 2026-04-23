@@ -1,4 +1,4 @@
-from tests.utils import create_user_and_login, auth_headers, create_expense
+from tests.utils import create_user_and_login, auth_headers, create_expense, create_category, create_budget
 
 
 def test_create_expense(client):
@@ -7,7 +7,8 @@ def test_create_expense(client):
     response = create_expense(client, token)
 
     assert response.status_code == 200
-    assert response.json()["amount"] == 10
+    data = response.json()
+    assert data["expense"]["amount"] == 10
 
 
 def test_get_expenses(client):
@@ -28,7 +29,7 @@ def test_update_expense(client):
     token = create_user_and_login(client, email="user3@test.com")
 
     res = create_expense(client, token)
-    expense_id = res.json()["id"]
+    expense_id = res.json()["expense"]["id"]
 
     response = client.put(
         f"/expenses/{expense_id}",
@@ -37,14 +38,14 @@ def test_update_expense(client):
     )
 
     assert response.status_code == 200
-    assert response.json()["amount"] == 20
+    assert response.json()["expense"]["amount"] == 20
 
 
 def test_delete_expense(client):
     token = create_user_and_login(client, email="user4@test.com")
 
     res = create_expense(client, token)
-    expense_id = res.json()["id"]
+    expense_id = res.json()["expense"]["id"]
 
     response = client.delete(
         f"/expenses/{expense_id}",
@@ -59,7 +60,7 @@ def test_forbidden_access(client):
     token2 = create_user_and_login(client, email="user6@test.com")
 
     res = create_expense(client, token1)
-    expense_id = res.json()["id"]
+    expense_id = res.json()["expense"]["id"]
 
     response = client.delete(
         f"/expenses/{expense_id}",
@@ -72,7 +73,6 @@ def test_forbidden_access(client):
 def test_monthly_analytics(client):
     token = create_user_and_login(client, email="analytics@test.com")
 
-    # Crear varios gastos
     create_expense(client, token, amount=10)
     create_expense(client, token, amount=20)
 
@@ -87,4 +87,99 @@ def test_monthly_analytics(client):
 
     assert len(data) == 1
     assert data[0]["total"] == 30
+
+
+def test_create_category(client):
+    token = create_user_and_login(client, email="category_test@test.com")
+
+    response = create_category(client, token, name="餐饮")
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "餐饮"
+
+
+def test_get_categories(client):
+    token = create_user_and_login(client, email="categories_test@test.com")
+
+    create_category(client, token, name="餐饮")
+    create_category(client, token, name="交通")
+
+    response = client.get(
+        "/categories/",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+
+def test_create_budget(client):
+    token = create_user_and_login(client, email="budget_test@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    budget_res = create_budget(client, token, category_id=category_id, amount=1000)
+
+    assert budget_res.status_code == 200
+    assert budget_res.json()["amount"] == 1000
+
+
+def test_expense_with_budget_check(client):
+    token = create_user_and_login(client, email="budget_check@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    create_budget(client, token, category_id=category_id, amount=1000)
+
+    expense_res = client.post(
+        "/expenses/",
+        json={
+            "amount": 200,
+            "description": "午餐",
+            "category_id": category_id
+        },
+        headers=auth_headers(token)
+    )
+
+    assert expense_res.status_code == 200
+    data = expense_res.json()
     
+    assert data["expense"]["amount"] == 200
+    assert data["budget_info"] is not None
+    assert data["budget_info"]["has_budget"] == True
+    assert data["budget_info"]["spent"] == 200
+    assert data["budget_info"]["remaining"] == 800
+
+
+def test_budget_summary(client):
+    token = create_user_and_login(client, email="budget_summary@test.com")
+
+    category_res = create_category(client, token, name="餐饮")
+    category_id = category_res.json()["id"]
+
+    create_budget(client, token, category_id=category_id, amount=1000)
+
+    client.post(
+        "/expenses/",
+        json={
+            "amount": 300,
+            "description": "午餐",
+            "category_id": category_id
+        },
+        headers=auth_headers(token)
+    )
+
+    response = client.get(
+        "/budgets/summary",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert data["total_budget"] == 1000
+    assert data["total_spent"] == 300
+    assert data["total_remaining"] == 700
+    assert len(data["budgets"]) == 1

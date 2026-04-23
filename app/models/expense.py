@@ -23,6 +23,12 @@ class Expense(Base):
         nullable=False
     )
 
+    category_id = Column(
+        Integer,
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -37,10 +43,12 @@ class Expense(Base):
     )
 
     user = relationship("User", back_populates="expenses")
+    category = relationship("Category", back_populates="expenses")
 
     __table_args__ = (
         CheckConstraint("amount >= 0", name="check_amount_positive"),
         CheckConstraint("length(trim(description)) > 0", name="check_description_not_empty"),
         Index("idx_expenses_user_id", "user_id"),
+        Index("idx_expenses_category_id", "category_id"),
         Index("idx_expenses_created_at", "created_at"),
     )
