@@ -78,7 +78,7 @@ def update_expense_by_user(db, expense_id, user_id, amount=None, description=Non
     return expense
 
 
-def get_monthly_expenses(db, user_id, status: ExpenseStatus | None = None):
+def get_monthly_expenses(db, user_id, status: ExpenseStatus | None = ExpenseStatus.APPROVED):
     db_url = str(db.bind.url)
 
     if "sqlite" in db_url:
