@@ -5,10 +5,11 @@ import logging
 from app.core.config import settings
 from app.db.database import engine, Base
 
-from app.models import user, expense
+from app.models import user, expense, exchange_rate
 
 from app.api.routes.user_routes import router as user_router
 from app.api.routes.expense_routes import router as expense_router
+from app.api.routes.exchange_rate_routes import router as exchange_rate_router
 
 
 logging.basicConfig(
@@ -35,6 +36,7 @@ app = FastAPI(
 
 app.include_router(user_router, prefix="/users", tags=["Users"])
 app.include_router(expense_router, prefix="/expenses", tags=["Expenses"])
+app.include_router(exchange_rate_router, prefix="/exchange-rates", tags=["Exchange Rates"])
 
 
 @app.get("/")
