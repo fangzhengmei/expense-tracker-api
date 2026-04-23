@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 from decimal import Decimal
+from datetime import datetime
+from app.models.enums import ExpenseStatus
 
 
 class ExpenseCreate(BaseModel):
@@ -18,3 +20,28 @@ class ExpenseOut(BaseModel):
     id: int
     amount: Decimal
     description: str
+    status: ExpenseStatus
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ApprovalCreate(BaseModel):
+    expense_id: int
+    status: ExpenseStatus
+    comment: str | None = Field(None, max_length=500)
+
+
+class ApprovalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    expense_id: int
+    approver_id: int
+    status: ExpenseStatus
+    comment: str | None
+    created_at: datetime
+
+
+class ExpenseWithApprovalsOut(ExpenseOut):
+    approvals: list[ApprovalOut] = []
