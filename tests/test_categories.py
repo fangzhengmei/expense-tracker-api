@@ -363,3 +363,412 @@ def test_category_stats_filter_by_category(client):
     assert len(stats) == 1
     assert stats[0]["category"]["name"] == "餐饮"
     assert stats[0]["total_amount"] == 80
+
+
+def test_create_category_empty_name(client):
+    token = create_user_and_login(client, email="err_cat_user1@test.com")
+
+    response = client.post(
+        "/categories/",
+        json={
+            "name": "",
+            "icon": "📝",
+            "color": "#6B7280"
+        },
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_category_name_too_long(client):
+    token = create_user_and_login(client, email="err_cat_user2@test.com")
+
+    long_name = "a" * 51
+
+    response = client.post(
+        "/categories/",
+        json={
+            "name": long_name,
+            "icon": "📝",
+            "color": "#6B7280"
+        },
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_category_icon_too_long(client):
+    token = create_user_and_login(client, email="err_cat_user3@test.com")
+
+    long_icon = "a" * 21
+
+    response = client.post(
+        "/categories/",
+        json={
+            "name": "测试分类",
+            "icon": long_icon,
+            "color": "#6B7280"
+        },
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_category_color_too_long(client):
+    token = create_user_and_login(client, email="err_cat_user4@test.com")
+
+    long_color = "#1234567"
+
+    response = client.post(
+        "/categories/",
+        json={
+            "name": "测试分类",
+            "icon": "📝",
+            "color": long_color
+        },
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_category_empty_name(client):
+    token = create_user_and_login(client, email="err_cat_user5@test.com")
+
+    create_response = create_category(client, token, name="原始名称")
+    category_id = create_response.json()["id"]
+
+    response = client.put(
+        f"/categories/{category_id}",
+        json={"name": ""},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_category_name_too_long(client):
+    token = create_user_and_login(client, email="err_cat_user6@test.com")
+
+    create_response = create_category(client, token, name="原始名称")
+    category_id = create_response.json()["id"]
+
+    long_name = "a" * 51
+
+    response = client.put(
+        f"/categories/{category_id}",
+        json={"name": long_name},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_category_icon_too_long(client):
+    token = create_user_and_login(client, email="err_cat_user7@test.com")
+
+    create_response = create_category(client, token, name="原始名称")
+    category_id = create_response.json()["id"]
+
+    long_icon = "a" * 21
+
+    response = client.put(
+        f"/categories/{category_id}",
+        json={"icon": long_icon},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_category_color_too_long(client):
+    token = create_user_and_login(client, email="err_cat_user8@test.com")
+
+    create_response = create_category(client, token, name="原始名称")
+    category_id = create_response.json()["id"]
+
+    long_color = "#1234567"
+
+    response = client.put(
+        f"/categories/{category_id}",
+        json={"color": long_color},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_expense_create_invalid_category_id(client):
+    token = create_user_and_login(client, email="err_exp_user1@test.com")
+
+    response = create_expense(
+        client, token,
+        amount=50,
+        description="测试",
+        category_id=999999
+    )
+
+    assert response.status_code == 400
+    assert "分类" in response.json().get("detail", "") or "无效" in response.json().get("detail", "")
+
+
+def test_expense_update_invalid_category_id(client):
+    token = create_user_and_login(client, email="err_exp_user2@test.com")
+
+    create_response = create_expense(client, token, amount=50, description="测试")
+    expense_id = create_response.json()["id"]
+
+    response = client.put(
+        f"/expenses/{expense_id}",
+        json={"category_id": 999999},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 400
+
+
+def test_expense_filter_by_non_existent_category(client):
+    token = create_user_and_login(client, email="err_exp_user3@test.com")
+
+    food_category_id = get_default_category_id(client, token, "餐饮")
+    create_expense(client, token, amount=30, description="早餐", category_id=food_category_id)
+
+    response = client.get(
+        "/expenses/?category_id=999999",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_expense_update_negative_category_id(client):
+    token = create_user_and_login(client, email="err_exp_user4@test.com")
+
+    create_response = create_expense(client, token, amount=50, description="测试")
+    expense_id = create_response.json()["id"]
+
+    response = client.put(
+        f"/expenses/{expense_id}",
+        json={"category_id": -1},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 400
+
+
+def test_stats_start_date_only(client):
+    token = create_user_and_login(client, email="stats_boundary1@test.com")
+
+    food_category_id = get_default_category_id(client, token, "餐饮")
+    create_expense(client, token, amount=50, description="测试", category_id=food_category_id)
+
+    response = client.get(
+        "/categories/analytics/stats?start_date=2020-01-01T00:00:00",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    stats = response.json()
+
+    food_stats = next((s for s in stats if s["category"]["name"] == "餐饮"), None)
+    assert food_stats is not None
+    assert food_stats["total_amount"] == 50
+
+
+def test_stats_end_date_only(client):
+    token = create_user_and_login(client, email="stats_boundary2@test.com")
+
+    food_category_id = get_default_category_id(client, token, "餐饮")
+    create_expense(client, token, amount=50, description="测试", category_id=food_category_id)
+
+    response = client.get(
+        "/categories/analytics/stats?end_date=2030-12-31T23:59:59",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    stats = response.json()
+
+    food_stats = next((s for s in stats if s["category"]["name"] == "餐饮"), None)
+    assert food_stats is not None
+    assert food_stats["total_amount"] == 50
+
+
+def test_stats_dates_swapped_returns_empty(client):
+    token = create_user_and_login(client, email="stats_boundary3@test.com")
+
+    food_category_id = get_default_category_id(client, token, "餐饮")
+    create_expense(client, token, amount=50, description="测试", category_id=food_category_id)
+
+    response = client.get(
+        "/categories/analytics/stats?start_date=2030-01-01&end_date=2020-01-01",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    stats = response.json()
+
+    food_stats = next((s for s in stats if s["category"]["name"] == "餐饮"), None)
+    if food_stats:
+        assert food_stats["total_amount"] == 0
+
+
+def test_stats_invalid_date_format(client):
+    token = create_user_and_login(client, email="stats_boundary4@test.com")
+
+    response = client.get(
+        "/categories/analytics/stats?start_date=invalid-date",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_expense_filter_start_date_only(client):
+    token = create_user_and_login(client, email="exp_boundary1@test.com")
+
+    food_category_id = get_default_category_id(client, token, "餐饮")
+    create_expense(client, token, amount=50, description="测试", category_id=food_category_id)
+
+    response = client.get(
+        "/expenses/?start_date=2020-01-01T00:00:00",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_expense_filter_end_date_only(client):
+    token = create_user_and_login(client, email="exp_boundary2@test.com")
+
+    food_category_id = get_default_category_id(client, token, "餐饮")
+    create_expense(client, token, amount=50, description="测试", category_id=food_category_id)
+
+    response = client.get(
+        "/expenses/?end_date=2030-12-31T23:59:59",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_expense_filter_dates_swapped_returns_empty(client):
+    token = create_user_and_login(client, email="exp_boundary3@test.com")
+
+    food_category_id = get_default_category_id(client, token, "餐饮")
+    create_expense(client, token, amount=50, description="测试", category_id=food_category_id)
+
+    response = client.get(
+        "/expenses/?start_date=2030-01-01&end_date=2020-01-01",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_expense_filter_invalid_date_format(client):
+    token = create_user_and_login(client, email="exp_boundary4@test.com")
+
+    response = client.get(
+        "/expenses/?start_date=not-a-date",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 422
+
+
+def test_category_id_zero_not_allowed_in_create(client):
+    token = create_user_and_login(client, email="zero_cat_user@test.com")
+
+    response = create_expense(
+        client, token,
+        amount=50,
+        description="测试",
+        category_id=0
+    )
+
+    assert response.status_code == 400
+
+
+def test_get_non_existent_category_id_stats(client):
+    token = create_user_and_login(client, email="stats_nonexistent@test.com")
+
+    food_category_id = get_default_category_id(client, token, "餐饮")
+    create_expense(client, token, amount=50, description="测试", category_id=food_category_id)
+
+    response = client.get(
+        "/categories/analytics/stats?category_id=999999",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_create_category_without_icon_color_uses_defaults(client):
+    token = create_user_and_login(client, email="default_vals_user@test.com")
+
+    response = client.post(
+        "/categories/",
+        json={"name": "测试默认值"},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["icon"] == "📝"
+    assert data["color"] == "#6B7280"
+
+
+def test_update_category_partial_fields(client):
+    token = create_user_and_login(client, email="partial_update_user@test.com")
+
+    create_response = create_category(
+        client, token,
+        name="原始名称",
+        icon="🍎",
+        color="#FF0000"
+    )
+    category_id = create_response.json()["id"]
+
+    response = client.put(
+        f"/categories/{category_id}",
+        json={"name": "仅更新名称"},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "仅更新名称"
+    assert data["icon"] == "🍎"
+    assert data["color"] == "#FF0000"
+
+
+def test_delete_non_existent_category(client):
+    token = create_user_and_login(client, email="del_nonexistent_user@test.com")
+
+    response = client.delete(
+        "/categories/999999",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 404
+
+
+def test_update_non_existent_category(client):
+    token = create_user_and_login(client, email="update_nonexistent_user@test.com")
+
+    response = client.put(
+        "/categories/999999",
+        json={"name": "测试"},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 404
