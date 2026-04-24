@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.db.database import Base, get_db
+from app.services.category_service import init_default_categories
 
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -30,6 +31,7 @@ def db():
 
     db = TestingSessionLocal()
     try:
+        init_default_categories(db)
         yield db
     finally:
         db.close()
