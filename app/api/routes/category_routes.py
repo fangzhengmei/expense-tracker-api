@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 from typing import Optional
 
@@ -48,6 +49,9 @@ def create_category(
         )
     except CategoryNameAlreadyExistsError:
         raise HTTPException(status_code=400, detail="分类名称已存在")
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="分类名称已存在")
 
 
 @router.put("/{category_id}", response_model=CategoryOut)
@@ -71,6 +75,9 @@ def update_category(
     except UnauthorizedCategoryAccess:
         raise HTTPException(status_code=403, detail="无权修改此分类")
     except CategoryNameAlreadyExistsError:
+        raise HTTPException(status_code=400, detail="分类名称已存在")
+    except IntegrityError:
+        db.rollback()
         raise HTTPException(status_code=400, detail="分类名称已存在")
 
 

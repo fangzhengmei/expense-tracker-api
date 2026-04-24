@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Boolean, ForeignKey, DateTime, func, Index
+    Column, Integer, String, Boolean, ForeignKey, DateTime, func, Index, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 
@@ -44,4 +44,5 @@ class Category(Base):
     __table_args__ = (
         Index("idx_categories_user_id", "user_id"),
         Index("idx_categories_is_default", "is_default"),
+        UniqueConstraint("user_id", "name", name="uq_category_user_name"),
     )

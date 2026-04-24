@@ -866,3 +866,85 @@ def test_can_update_category_to_same_name(client):
     assert updated["name"] == "我的分类"
     assert updated["icon"] == "💰"
     assert updated["color"] == "#FF0000"
+
+
+def test_database_unique_constraint_prevents_duplicates(client, db):
+    from app.models.category import Category
+    from sqlalchemy.exc import IntegrityError
+
+    token = create_user_and_login(client, email="db_constraint_user1@test.com")
+
+    response = client.get("/users/me", headers=auth_headers(token))
+    user_id = response.json()["id"]
+
+    category1 = Category(
+        name="重复测试分类",
+        icon="📝",
+        color="#6B7280",
+        is_default=False,
+        user_id=user_id
+    )
+    db.add(category1)
+    db.commit()
+
+    category2 = Category(
+        name="重复测试分类",
+        icon="💰",
+        color="#FF0000",
+        is_default=False,
+        user_id=user_id
+    )
+    db.add(category2)
+
+    import pytest
+    with pytest.raises(IntegrityError):
+        db.commit()
+
+    db.rollback()
+
+
+def test_different_users_can_have_same_category_name_db_constraint(client, db):
+    from app.models.category import Category
+    from app.models.user import User
+    from app.core.security import get_password_hash
+
+    user1 = User(
+        email="db_user1@test.com",
+        password_hash=get_password_hash("123456")
+    )
+    db.add(user1)
+    db.commit()
+    db.refresh(user1)
+
+    user2 = User(
+        email="db_user2@test.com",
+        password_hash=get_password_hash("123456")
+    )
+    db.add(user2)
+    db.commit()
+    db.refresh(user2)
+
+    category1 = Category(
+        name="同名分类",
+        icon="📝",
+        color="#6B7280",
+        is_default=False,
+        user_id=user1.id
+    )
+    db.add(category1)
+    db.commit()
+
+    category2 = Category(
+        name="同名分类",
+        icon="💰",
+        color="#FF0000",
+        is_default=False,
+        user_id=user2.id
+    )
+    db.add(category2)
+    db.commit()
+
+    db.refresh(category1)
+    db.refresh(category2)
+    assert category1.id != category2.id
+    assert category1.user_id != category2.user_id
