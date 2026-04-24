@@ -14,7 +14,8 @@ from app.services.category_service import (
     get_category_stats,
     CategoryNotFoundError,
     UnauthorizedCategoryAccess,
-    CannotDeleteDefaultCategory
+    CannotDeleteDefaultCategory,
+    CategoryNameAlreadyExistsError
 )
 
 from app.api.deps import get_current_user
@@ -37,13 +38,16 @@ def create_category(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return create_user_category(
-        db,
-        name=category.name,
-        icon=category.icon,
-        color=category.color,
-        user_id=user.id
-    )
+    try:
+        return create_user_category(
+            db,
+            name=category.name,
+            icon=category.icon,
+            color=category.color,
+            user_id=user.id
+        )
+    except CategoryNameAlreadyExistsError:
+        raise HTTPException(status_code=400, detail="分类名称已存在")
 
 
 @router.put("/{category_id}", response_model=CategoryOut)
@@ -66,6 +70,8 @@ def update_category(
         raise HTTPException(status_code=404, detail="分类不存在")
     except UnauthorizedCategoryAccess:
         raise HTTPException(status_code=403, detail="无权修改此分类")
+    except CategoryNameAlreadyExistsError:
+        raise HTTPException(status_code=400, detail="分类名称已存在")
 
 
 @router.delete("/{category_id}")

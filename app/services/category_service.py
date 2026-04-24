@@ -16,6 +16,10 @@ class CannotDeleteDefaultCategory(Exception):
     pass
 
 
+class CategoryNameAlreadyExistsError(Exception):
+    pass
+
+
 DEFAULT_CATEGORIES = [
     {"name": "餐饮", "icon": "🍜", "color": "#EF4444"},
     {"name": "交通", "icon": "🚗", "color": "#3B82F6"},
@@ -67,7 +71,34 @@ def can_user_access_category(db, category_id, user_id):
     return category.user_id == user_id
 
 
+def is_category_name_taken(db, name, user_id, exclude_category_id=None):
+    default_exists = db.query(Category).filter(
+        Category.is_default == True,
+        Category.name == name
+    ).first()
+    if default_exists:
+        return True
+
+    query = db.query(Category).filter(
+        Category.is_default == False,
+        Category.user_id == user_id,
+        Category.name == name
+    )
+
+    if exclude_category_id is not None:
+        query = query.filter(Category.id != exclude_category_id)
+
+    custom_exists = query.first()
+    if custom_exists:
+        return True
+
+    return False
+
+
 def create_user_category(db, name, icon, color, user_id):
+    if is_category_name_taken(db, name, user_id):
+        raise CategoryNameAlreadyExistsError()
+
     category = Category(
         name=name,
         icon=icon or "📝",
@@ -94,6 +125,8 @@ def update_user_category(db, category_id, user_id, name=None, icon=None, color=N
         raise UnauthorizedCategoryAccess()
 
     if name is not None:
+        if is_category_name_taken(db, name, user_id, exclude_category_id=category_id):
+            raise CategoryNameAlreadyExistsError()
         category.name = name
     if icon is not None:
         category.icon = icon

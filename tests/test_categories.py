@@ -772,3 +772,97 @@ def test_update_non_existent_category(client):
     )
 
     assert response.status_code == 404
+
+
+def test_cannot_create_duplicate_category_name(client):
+    token = create_user_and_login(client, email="dup_cat_user1@test.com")
+
+    response1 = create_category(client, token, name="我的分类")
+    assert response1.status_code == 200
+
+    response2 = create_category(client, token, name="我的分类")
+    assert response2.status_code == 400
+    assert "已存在" in response2.json().get("detail", "")
+
+
+def test_cannot_create_category_with_default_name(client):
+    token = create_user_and_login(client, email="dup_cat_user2@test.com")
+
+    response = create_category(client, token, name="餐饮")
+    assert response.status_code == 400
+    assert "已存在" in response.json().get("detail", "")
+
+
+def test_different_users_can_have_same_category_name(client):
+    token1 = create_user_and_login(client, email="dup_cat_user3@test.com")
+    token2 = create_user_and_login(client, email="dup_cat_user4@test.com")
+
+    response1 = create_category(client, token1, name="我的分类")
+    assert response1.status_code == 200
+
+    response2 = create_category(client, token2, name="我的分类")
+    assert response2.status_code == 200
+
+    categories1 = client.get("/categories/", headers=auth_headers(token1)).json()
+    categories2 = client.get("/categories/", headers=auth_headers(token2)).json()
+
+    user1_custom = [c for c in categories1 if not c["is_default"]]
+    user2_custom = [c for c in categories2 if not c["is_default"]]
+
+    assert len(user1_custom) == 1
+    assert len(user2_custom) == 1
+    assert user1_custom[0]["name"] == "我的分类"
+    assert user2_custom[0]["name"] == "我的分类"
+    assert user1_custom[0]["id"] != user2_custom[0]["id"]
+
+
+def test_cannot_update_category_to_duplicate_name(client):
+    token = create_user_and_login(client, email="dup_cat_user5@test.com")
+
+    create_category(client, token, name="分类A")
+    response_b = create_category(client, token, name="分类B")
+    category_b_id = response_b.json()["id"]
+
+    response = client.put(
+        f"/categories/{category_b_id}",
+        json={"name": "分类A"},
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 400
+    assert "已存在" in response.json().get("detail", "")
+
+
+def test_cannot_update_category_to_default_name(client):
+    token = create_user_and_login(client, email="dup_cat_user6@test.com")
+
+    response = create_category(client, token, name="我的分类")
+    category_id = response.json()["id"]
+
+    update_response = client.put(
+        f"/categories/{category_id}",
+        json={"name": "交通"},
+        headers=auth_headers(token)
+    )
+
+    assert update_response.status_code == 400
+    assert "已存在" in update_response.json().get("detail", "")
+
+
+def test_can_update_category_to_same_name(client):
+    token = create_user_and_login(client, email="dup_cat_user7@test.com")
+
+    response = create_category(client, token, name="我的分类", icon="📝", color="#000000")
+    category_id = response.json()["id"]
+
+    update_response = client.put(
+        f"/categories/{category_id}",
+        json={"name": "我的分类", "icon": "💰", "color": "#FF0000"},
+        headers=auth_headers(token)
+    )
+
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["name"] == "我的分类"
+    assert updated["icon"] == "💰"
+    assert updated["color"] == "#FF0000"
