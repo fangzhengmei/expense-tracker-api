@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 from app.schemas.expense_schema import ExpenseCreate, ExpenseUpdate
 from app.db.database import get_db
@@ -10,6 +12,7 @@ from app.services.expense_service import (
     delete_expense_by_user,
     update_expense_by_user,
     get_monthly_expenses,
+    export_expenses_to_csv,
     ExpenseNotFoundError
 )
 
@@ -79,3 +82,25 @@ def get_monthly_analytics(
     db: Session = Depends(get_db)
 ):
     return get_monthly_expenses(db, user.id)
+
+
+@router.get("/export/csv")
+def export_expenses_csv(
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    csv_content = export_expenses_to_csv(db, user.id)
+    
+    filename = f"expenses_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    csv_with_bom = '\ufeff' + csv_content.getvalue()
+    csv_bytes = csv_with_bom.encode('utf-8')
+    
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Type": "text/csv; charset=utf-8"
+        }
+    )

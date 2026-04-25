@@ -1,3 +1,7 @@
+import csv
+from io import StringIO
+from datetime import datetime
+
 from app.models.expense import Expense
 from sqlalchemy import func
 
@@ -90,4 +94,28 @@ def get_monthly_expenses(db, user_id):
         }
         for row in results
     ]
+
+
+def export_expenses_to_csv(db, user_id):
+    expenses = get_expenses_by_user(db, user_id)
+
+    output = StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(["ID", "金额", "描述", "创建时间", "更新时间"])
+
+    for expense in expenses:
+        created_at = expense.created_at.strftime("%Y-%m-%d %H:%M:%S") if expense.created_at else ""
+        updated_at = expense.updated_at.strftime("%Y-%m-%d %H:%M:%S") if expense.updated_at else ""
+
+        writer.writerow([
+            expense.id,
+            str(expense.amount),
+            expense.description,
+            created_at,
+            updated_at
+        ])
+
+    output.seek(0)
+    return output
     

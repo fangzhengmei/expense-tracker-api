@@ -87,4 +87,49 @@ def test_monthly_analytics(client):
 
     assert len(data) == 1
     assert data[0]["total"] == 30
+
+
+def test_export_csv(client):
+    token = create_user_and_login(client, email="export@test.com")
+
+    create_expense(client, token, amount=10, description="午餐")
+    create_expense(client, token, amount=20, description="晚餐")
+
+    response = client.get(
+        "/expenses/export/csv",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "attachment" in response.headers["content-disposition"]
+
+    csv_content = response.content.decode('utf-8-sig')
+
+    assert "ID" in csv_content
+    assert "金额" in csv_content
+    assert "描述" in csv_content
+    assert "创建时间" in csv_content
+    assert "更新时间" in csv_content
+    assert "午餐" in csv_content
+    assert "晚餐" in csv_content
+    assert "10" in csv_content
+    assert "20" in csv_content
+
+
+def test_export_csv_empty(client):
+    token = create_user_and_login(client, email="empty_export@test.com")
+
+    response = client.get(
+        "/expenses/export/csv",
+        headers=auth_headers(token)
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+
+    csv_content = response.content.decode('utf-8-sig')
+
+    assert "ID" in csv_content
+    assert "金额" in csv_content
     
