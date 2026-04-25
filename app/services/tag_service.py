@@ -1,6 +1,6 @@
-from app.models.tag import Tag, expense_tag
+from app.models.tag import Tag
 from app.models.expense import Expense
-from sqlalchemy import func, select
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 
