@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_serializer
 from decimal import Decimal
 from typing import Optional, List
 from app.schemas.tag_schema import TagOut
@@ -23,3 +23,7 @@ class ExpenseOut(BaseModel):
     amount: Decimal
     description: str
     tags: Optional[List[TagOut]] = []
+
+    @field_serializer('amount')
+    def serialize_amount(self, v: Decimal) -> float:
+        return float(v)
