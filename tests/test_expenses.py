@@ -132,4 +132,19 @@ def test_export_csv_empty(client):
 
     assert "ID" in csv_content
     assert "金额" in csv_content
+
+
+def test_export_csv_without_token(client):
+    response = client.get("/expenses/export/csv")
+
+    assert response.status_code == 401
+
+
+def test_export_csv_with_invalid_token(client):
+    response = client.get(
+        "/expenses/export/csv",
+        headers={"Authorization": "Bearer invalid_token"}
+    )
+
+    assert response.status_code == 401
     
