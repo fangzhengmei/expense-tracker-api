@@ -1,11 +1,28 @@
 from sqlalchemy import (
     Column, Integer, String, Numeric, CheckConstraint,
-    ForeignKey, DateTime, func, Index
+    ForeignKey, DateTime, func, Index, Table
 )
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
+
+expense_tag = Table(
+    "expense_tags",
+    Base.metadata,
+    Column(
+        "expense_id",
+        Integer,
+        ForeignKey("expenses.id", ondelete="CASCADE"),
+        primary_key=True
+    ),
+    Column(
+        "tag_id",
+        Integer,
+        ForeignKey("tags.id", ondelete="CASCADE"),
+        primary_key=True
+    )
+)
 
 
 class Expense(Base):
@@ -37,6 +54,11 @@ class Expense(Base):
     )
 
     user = relationship("User", back_populates="expenses")
+    tags = relationship(
+        "Tag",
+        secondary=expense_tag,
+        back_populates="expenses"
+    )
 
     __table_args__ = (
         CheckConstraint("amount >= 0", name="check_amount_positive"),

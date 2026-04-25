@@ -5,10 +5,11 @@ import logging
 from app.core.config import settings
 from app.db.database import engine, Base
 
-from app.models import user, expense
+from app.models import user, expense, tag
 
 from app.api.routes.user_routes import router as user_router
 from app.api.routes.expense_routes import router as expense_router
+from app.api.routes.tag_routes import router as tag_router
 
 
 logging.basicConfig(
@@ -35,6 +36,7 @@ app = FastAPI(
 
 app.include_router(user_router, prefix="/users", tags=["Users"])
 app.include_router(expense_router, prefix="/expenses", tags=["Expenses"])
+app.include_router(tag_router, prefix="/tags", tags=["Tags"])
 
 
 @app.get("/")

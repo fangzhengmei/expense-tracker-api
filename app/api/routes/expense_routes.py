@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import Optional, List
 
-from app.schemas.expense_schema import ExpenseCreate, ExpenseUpdate
+from app.schemas.expense_schema import ExpenseCreate, ExpenseUpdate, ExpenseOut
 from app.db.database import get_db
 
 from app.services.expense_service import (
@@ -10,6 +11,8 @@ from app.services.expense_service import (
     delete_expense_by_user,
     update_expense_by_user,
     get_monthly_expenses,
+    get_expenses_by_tag,
+    get_expenses_by_tags,
     ExpenseNotFoundError
 )
 
@@ -19,7 +22,7 @@ from app.api.deps import get_current_user
 router = APIRouter()
 
 
-@router.post("/")
+@router.post("/", response_model=ExpenseOut)
 def create_expense_endpoint(
     expense: ExpenseCreate,
     user=Depends(get_current_user),
@@ -29,15 +32,21 @@ def create_expense_endpoint(
         db,
         amount=expense.amount,
         description=expense.description,
-        user_id=user.id
+        user_id=user.id,
+        tag_ids=expense.tag_ids
     )
 
 
-@router.get("/")
+@router.get("/", response_model=list[ExpenseOut])
 def list_expenses(
     user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tag_ids: Optional[List[int]] = Query(None)
 ):
+    if tag_ids:
+        if len(tag_ids) == 1:
+            return get_expenses_by_tag(db, user.id, tag_ids[0])
+        return get_expenses_by_tags(db, user.id, tag_ids)
     return get_expenses_by_user(db, user.id)
 
 
@@ -54,7 +63,7 @@ def delete_expense_endpoint(
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
 
 
-@router.put("/{id}")
+@router.put("/{id}", response_model=ExpenseOut)
 def update_expense_endpoint(
     id: int,
     expense: ExpenseUpdate,
@@ -67,7 +76,8 @@ def update_expense_endpoint(
             expense_id=id,
             user_id=user.id,
             amount=expense.amount,
-            description=expense.description
+            description=expense.description,
+            tag_ids=expense.tag_ids
         )
     except ExpenseNotFoundError:
         raise HTTPException(status_code=404, detail="Gasto no encontrado")

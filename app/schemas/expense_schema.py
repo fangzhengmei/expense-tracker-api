@@ -1,15 +1,19 @@
 from pydantic import BaseModel, Field, ConfigDict
 from decimal import Decimal
+from typing import Optional, List
+from app.schemas.tag_schema import TagOut
 
 
 class ExpenseCreate(BaseModel):
     amount: Decimal = Field(..., ge=0)
     description: str = Field(..., min_length=1, max_length=255)
+    tag_ids: Optional[List[int]] = Field(None, description="List of tag IDs to associate with this expense")
 
 
 class ExpenseUpdate(BaseModel):
-    amount: Decimal | None = Field(None, ge=0)
-    description: str | None = Field(None, min_length=1, max_length=255)
+    amount: Optional[Decimal] = Field(None, ge=0)
+    description: Optional[str] = Field(None, min_length=1, max_length=255)
+    tag_ids: Optional[List[int]] = Field(None, description="List of tag IDs to associate with this expense (replaces existing tags)")
 
 
 class ExpenseOut(BaseModel):
@@ -18,3 +22,4 @@ class ExpenseOut(BaseModel):
     id: int
     amount: Decimal
     description: str
+    tags: Optional[List[TagOut]] = []
